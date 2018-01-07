@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Document</title>
+  <style>
+  body{
+    font: 11px Helvetica;
+  }
+  .editor{
+    background: #e2e2e2;
+    padding: 10px;
+  }
+  .editor__controls{
+    margin-bottom: 10px;
+  }
+  .editor__controls__btn{
+    display: inline-block;
+    padding: 10px 20px;
+    background: #f3f3f3;
+    border: 1px solid #ddd;
+  }
+  .editor__controls__btn:hover{
+    cursor: move;
+    background: #fff;
+  }
+
+  .editor__content{
+    display: inline-block;
+    vertical-align: top;
+    width: 70%;
+    outline: 1px solid #f3f3f3;
+  }
+  .editor__settings{
+    display: inline-block;
+    vertical-align: top;
+    width: 30%;
+    box-sizing: border-box;
+    padding: 0 10px;
+    margin-top: -1px;
+  }
+  .editor__body{
+    display: block;
+    border: 0;
+    width: 360px;
+    max-width: 100%;
+    height: 500px;
+    margin: 20px auto 0;
+    background: #fff;
+  }
+  .editor__body > div:hover{
+    outline: 2px solid red;
+  }
+
+  .editor__sizes{
+    font-size: 10px;
+    text-align: center;
+    margin: 0 auto;
+    position: absolute;
+    background: #eee;
+    line-height: 20px;
+    max-width: 100%;
+    left: 0;
+    right: 0;
+    border-right: 1px solid #e2e2e2;
+    border-left: 1px solid #e2e2e2;
+    cursor: pointer;
+  }
+  .editor__sizes:hover{
+    background: #f3f3f3;
+  }
+  .editor__sizes::after,
+  .editor__sizes::before {
+    float: left;
+    margin: 0 5px;
+    content: attr(name);
+    font-size: 10px;
+   }
+  .editor__sizes::after{
+    float: right;
+  }
+  /*textarea[name="html"]{
+    display: none;
+  }
+  input:checked ~ textarea[name="html"]{
+    display: block;
+  }*/
+
+  .editor__row{
+    margin-bottom: 10px;
+  }
+  .editor__label{
+    display: inline-block;
+    vertical-align: top;
+    width: 20%;
+  }
+  .editor__row input,
+  .editor__row select,
+  .editor__row textarea{
+    width: 50%
+  }
+  </style>
+</head>
+<body>
+  <div class="editor">1</div>
+
+  <table>
+    <tr>
+      <td></td>
+    </tr>
+  </table>
+</body>
+<script type="text/javascript">
+  function Editor(selector, options){
+    var _this = this;
+
+    options = options || {};
+
+    this.options = Object.defineProperties({
+      buttons: {
+        text: '<td>{{text}}</td>',
+        image: '<td align="center"><img src="placeholder-thumb.svg" /></td>',
+        group: '<td data="text">column</td><td width="20"></td><td>column</td>',
+        line: '<div>{{line}}</div>',
+        separator: '<td data="separator">&#160;</td>',
+        button: '<div>{{button}}</div>',
+        footer: '<div>{{footer}}</div>'
+      },
+      localize: {
+        text: 'Текст',
+        image: 'Изображение',
+        group: 'Группа',
+        line: 'Линия',
+        button: 'Кнопка',
+        footer: 'Футер',
+        size: 'Размер',
+        separator: 'Разделитель',
+        align: 'Выравнивание'
+      },
+      sizes: [360, 480, 600, 720, 840, 960, 1024, 1280],//, 1440, 1600
+      baseTemplateUrl: 'about: blank',
+      baseTemplate: null
+    }, options);
+
+    this.editor = document.querySelector(selector);
+
+    this.editor.innerHTML = this.buildEditor();
+    this.editor.addEventListener('dragstart', function(e){
+      var key = e.target.getAttribute('data-key');
+      e.dataTransfer.setData('data', _this.options.buttons[key]);//this.buttons[key]
+    });
+
+    var frame = this.editor.querySelector('.editor__body');
+    var forms = this.editor.querySelector('.editor__settings');
+    var settings = forms.getElementsByTagName('form')[0];
+    var fields = forms.getElementsByTagName('form')[1];
+
+    var controls = {
+      text: {
+        align: 'left|center|right',
+        colspan: '0|1|2|3'
+      }
+    };
+
+    fields.addEventListener('submit', function(e){
+      var result = {};
+      Array.prototype.forEach.call(this.elements, function(item){
+        if(item.name){
+          result[item.name] = item.name == 'text' ? item.value.replace(/\n/g, '<br>') : item.value;
+        }
+      });
+      frame.contentWindow.postMessage({event: 'change', data: result}, '*');
+      e.preventDefault();
+    });
+
+    window.addEventListener('message', function(e){
+      var control = e.data.data;
+      var result = [];
+      var options;
+      var item;
+      var k;
+
+      delete control.data;
+      delete control.class;
+
+      for (k in control){
+        options = controls[e.data.type];
+        if(options && options[k]){
+          options = options[k].split('|').map(function(item){
+            return '<option value="' + item + '"' + (item == control[k] ? ' selected' : '') + '>' + item + '</option>';
+          }).join('');
+
+          item = '<select name="' + k + '">' + options + '</select>';
+        }else if(k == 'text'){
+          item = '<textarea name="text">' + control[k] + '</textarea>';
+        }else{
+          item = '<input name="' + k + '" value="' + control[k] + '">';
+        }
+
+        result.push('<div class="editor__row"><span class="editor__label">' + (_this.options.localize[k] || k) + '</span> ' +  item + '</div>');
+      }
+
+      result.push('<input type="submit">');
+
+      fields.innerHTML = result.join('');
+    });
+
+    function initFrame(html, callback){
+      var script = document.createElement('script');
+
+      function init(){
+        var mouseevents = {
+          mouseover: function(e){
+            e.target.classList.add('hover');
+          },
+          mouseout: function(e){
+            e.target.classList.remove('hover');
+          }
+        };
+        function tableEvents(){
+          Array.prototype.slice.call(document.querySelector('table').rows || []).forEach(function(item){
+
+            Object.keys(mouseevents).forEach(function(key){
+              item['on' + key] = mouseevents[key];
+            });
+          });
+        }
+        var body = document.body;
+        function closest(el){
+          //TODO
+        };
+        function toggle(el){
+          el.classList.toggle('hover');
+        }
+        var selectedEl = null;
+
+        window.addEventListener('message', function(e){
+          if(!selectedEl) return;
+
+          var k;
+          var data = e.data.data;
+
+          for(k in data){
+            if(k == 'text'){
+              selectedEl.innerHTML = data[k];
+            }else{
+              selectedEl[k] = data[k];
+            }
+          }
+        });
+
+        var events = {
+          click: function(e){
+            selectedEl = e.target;
+
+            var result = {};
+            Array.prototype.forEach.call(selectedEl.attributes, function(item){
+              result[item.name] = item.value;
+            });
+
+            if(result.data == 'text'){
+              result.text = selectedEl.innerHTML.replace(/<br>/g, '\n');
+            }
+
+            window.parent.postMessage({
+              event: 'click',
+              data: result,
+              type: result.data
+            }, '*');
+          },
+          dragover: function(e){
+            if(e.target.parentNode.getAttribute('data') == 'row'){
+              e.preventDefault();
+            }
+          },
+          dragenter: function(e){
+            if(e.target.tagName.toLowerCase() == 'td'){
+              toggle(e.target.parentNode);
+            };
+          },
+          dragleave: function(e){
+            if(e.target.tagName.toLowerCase() == 'td'){
+              toggle(e.target.parentNode);
+            };
+          },
+          drop: function(e){
+            var target = e.target;
+            console.log(target);
+            /*
+            1. `beforeBegin` -- перед `elem`.
+            2. `afterBegin` -- внутрь `elem`, в самое начало.
+            3. `beforeEnd` -- внутрь `elem`, в конец.
+            4. `afterEnd` -- после `elem`.
+            */
+            target.parentNode.insertAdjacentHTML('afterEnd', '<tr data="row">'  +e.dataTransfer.getData('data') + '</tr>');
+            toggle(target.parentNode);
+            setTimeout(function(){
+              tableEvents();
+            });
+          }
+        }
+        Object.keys(events).forEach(function(key){
+          body.addEventListener(key, events[key]);
+        });
+      };
+
+      script.innerHTML = '(' + init.toString() + ')();';
+
+      //html = html.replace(/(<.+?>)/g, '$1\n');//TODO правильная регулярка
+      if(html){
+        frame.contentDocument.firstElementChild.innerHTML = html;
+      }
+      if(callback){
+        callback(frame.contentDocument.firstElementChild.innerHTML);
+      }
+      frame.contentDocument.body.appendChild(script);
+    }
+
+    function syncHtml(html){
+      if(settings.html.value != html){
+        console.log(html.match('\n'));
+        settings.html.value = html;
+      }
+    }
+
+    settings.addEventListener('submit', function(e){
+      initFrame(this.elements.html.value, syncHtml);
+      e.preventDefault();
+    });
+
+    frame.onload = function(){
+      initFrame(null, syncHtml);
+    }
+
+    var content = document.querySelector('.editor__content');
+
+    content.addEventListener('click', function(e){
+      if(~e.target.className.indexOf('editor__sizes')){
+        frame.style.cssText = e.target.style.cssText;
+      }
+    });
+  }
+
+  Editor.prototype.buildEditor = function(){
+    var options = this.options;
+    var sizes = options.sizes.reverse().map(function(size){
+      return '<div class="editor__sizes" style="width: ' + size + 'px" name="' + size + '">' + options.localize.size + '</div>';
+    }).join('');
+
+    return [
+      '<div class="editor__controls">',
+        Object.keys(options.buttons).map(function(key){
+          return '<button class="editor__controls__btn" draggable="true" data-key="' + key + '">' + options.localize[key] + '</button>';
+        }).join(''),
+      '</div>',
+      '<div class="editor__content" style="position: relative">',
+        sizes,
+        '<iframe class="editor__body" src="' + options.baseTemplateUrl + '"></iframe>', //about:blank
+      '</div>',
+      '<div class="editor__settings">',
+        '<form><label>Html<textarea name="html" style="width: 100%; height: 200px">framecontent</textarea></label><input type="submit"/></form>',
+        '<form class="editor__fields"></form>',
+      '</div>'
+    ].join('');
+  }
+
+  new Editor('.editor', {
+    //baseTemplateUrl: {value: 'mail-template.html'},//'http://thisismadebyhand.com/'
+    other: {value: 123, enumerable: true}
+  });
+
+</script>
+</html>
